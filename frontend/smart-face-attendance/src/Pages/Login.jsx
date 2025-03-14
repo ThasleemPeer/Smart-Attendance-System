@@ -5,6 +5,7 @@ function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const videoRef = useRef(null);
+  const canvasRef = useRef(null);
 
   // Initialize camera feed when component mounts
   useEffect(() => {
@@ -14,6 +15,14 @@ function Login() {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
+
+        // Wait for video metadata to load
+        await new Promise((resolve) => {
+          videoRef.current.onloadedmetadata = resolve;
+        });
+
+        // Add a small delay to ensure the video feed is fully rendered
+        await new Promise((resolve) => setTimeout(resolve, 500));
       } catch (err) {
         setError("Failed to access camera. Please allow camera permissions.");
         console.error("Camera access error:", err);
@@ -30,38 +39,43 @@ function Login() {
     };
   }, []);
 
+  // Continuously capture frames from the video feed
+  useEffect(() => {
+    const captureFrame = () => {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+
+      if (video && canvas && video.videoWidth > 0 && video.videoHeight > 0) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const context = canvas.getContext("2d");
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        // Optionally, you can process the captured frame here
+        // For example, send it to a backend API or perform some image processing
+        const imageData = canvas.toDataURL("image/jpeg");
+        console.log("Captured frame:", imageData); // Log the captured frame (for debugging)
+      }
+
+      requestAnimationFrame(captureFrame); // Continuously capture frames
+    };
+
+    captureFrame(); // Start the capture loop
+  }, []);
+
   const handleMarkAttendance = async () => {
     setLoading(true);
     setError("");
     setMessage("");
 
     try {
-      const video = videoRef.current;
-      if (!video || !video.srcObject) {
-        throw new Error("Camera feed not available");
+      const canvas = canvasRef.current;
+      if (!canvas) {
+        throw new Error("Canvas not available");
       }
 
-      // Wait for the video to start playing
-      await new Promise((resolve) => {
-        video.onplaying = resolve;
-      });
-
-      // Capture the image
-      const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const context = canvas.getContext("2d");
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      // Capture the current frame from the canvas
       const imageData = canvas.toDataURL("image/jpeg");
-
-      // Debug: Save the captured image
-      const link = document.createElement("a");
-      link.href = imageData;
-      link.download = "debug_image.jpg";
-      link.click();
-
-      // Stop the camera stream
-      video.srcObject.getTracks().forEach((track) => track.stop());
 
       // Send the image data to the backend
       const response = await fetch("http://localhost:8000/api/mark-attendance/", {
@@ -92,6 +106,7 @@ function Login() {
         <h2 className="text-2xl font-bold mb-4">Login</h2>
         <div className="mb-4">
           <video ref={videoRef} autoPlay className="w-full border rounded"></video>
+          <canvas ref={canvasRef} style={{ display: "none" }}></canvas>
         </div>
         <button
           onClick={handleMarkAttendance}

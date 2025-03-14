@@ -14,53 +14,63 @@ function Register() {
     e.preventDefault();
     setLoading(true);
     setError("");
-  
+
     try {
       // Access the camera
       const video = videoRef.current;
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       video.srcObject = stream;
-      video.play();
-  
-      // Wait for video to start
+
+      // Wait for video to start playing
       await new Promise((resolve) => {
         video.onplaying = resolve;
       });
-  
+
+      // Add a small delay to ensure the video feed is fully rendered
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Check if video dimensions are valid
+      if (video.videoWidth === 0 || video.videoHeight === 0) {
+        throw new Error("Video feed not ready. Please try again.");
+      }
+
       // Capture Image
       const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth || 640; // Increase resolution if needed
-      canvas.height = video.videoHeight || 480;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
       const context = canvas.getContext("2d");
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
       let imageData = canvas.toDataURL("image/jpeg");
-  
+
+      // Debug: Log the captured image data
+      console.log("Captured Image Data:", imageData);
+
       // Stop the camera stream
       stream.getTracks().forEach((track) => track.stop());
-  
+
       // Remove "data:image/jpeg;base64," prefix (Important for some backends)
       imageData = imageData.split(",")[1];
-  
+
       // Send to backend
       const response = await fetch("http://localhost:8000/api/register/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, regNumber, className, image: imageData }),
       });
-  
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || "Registration failed");
       }
-  
+
       navigate("/login");
     } catch (err) {
       setError(err.message);
+      console.error("Error during registration:", err);
     } finally {
       setLoading(false);
     }
   };
-  
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
